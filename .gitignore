@@ -1,0 +1,5 @@
+Data/
+mlruns/
+segmentation_env/
+Scripts/
+Model Checkpoints/
