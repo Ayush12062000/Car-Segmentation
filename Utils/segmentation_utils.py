@@ -62,7 +62,60 @@ class SegmentationDataset(Dataset):
         
         mask = self.preprocess(resized_mask)
         
+        # Create a new tensor of shape (5, 256, 256) filled with zeros
+        output_mask = torch.zeros((5, self.img_size, self.img_size), dtype=torch.float)
+
+        # Populate the output mask tensor using one-hot encoding
+        
+        '''
+            0 - background
+            1 - car
+            2 - wheel
+            3 - light
+            4 - windows
+        '''
+        
+        for i in range(5):
+            output_mask[i] = (mask == i).float()
+        
+        return img, output_mask
+
+
+# Augmentation
+class DataAugmentation(torch.nn.Module):
+    '''
+    Augmentation from Kornai
+    - Works with Image and Mask tensor input.
+    - Returns "Identity" if no augmentations are passed.
+    '''
+    
+    def __init__(self, augmentations):
+        super().__init__()
+        
+        self.augmentations = torch.nn.Identity()
+        
+        if len(augmentations) > 0:
+            self.augmentations = self._createAugmentationObject(augmentations)
+    
+    def _createAugmentationObject(self,augs):
+        aug_object_list = []
+        print(augs)
+        for aug in augs:
+            aug_name = aug['name']
+            aug.pop('name', None)
+            aug_object_list.append(
+                globals()[aug_name](**aug)
+                )
+            aug['name'] = aug_name
+        aug_container = kornia.augmentation.container.AugmentationSequential(*aug_object_list, data_keys=['input', 'mask'])
+        return aug_container
+    
+    @torch.no_grad()  # disable gradients for effiency
+    def forward(self, img, mask):
+        img, mask = self.augmentations(img, mask)
         return img, mask
+
+
 
 # Get Metric
 def getScore(model, data):
@@ -77,7 +130,7 @@ def getScore(model, data):
             pred = torch.sigmoid(pred).squeeze().cpu()
             
         dice = monai.metrics.compute_meandice(pred, masks.squeeze())
-        iou = torchmetrics.functional.jaccard_index(pred.squeeze(), masks.int().squeeze(), num_classes=2)
+        iou = torchmetrics.functional.jaccard_index(pred.squeeze(), masks.int().squeeze(), num_classes=5)
 
         dice_score.append(dice.item())
         iou_list.append(iou.item())
@@ -115,3 +168,20 @@ def load_checkpoint(checkpoint, model):
     
     print("=> Loading checkpoint")
     model.load_state_dict(checkpoint["state_dict"])
+
+def view_model(model_path):
+    # Model trace path
+    model_trace_path = [a for a in os.listdir(model_path) if a.endswith("_trace.pth")][0]
+    model_trace_path = os.path.join(model_path, model_trace_path)
+    
+    # model weights path
+    model_weights_path = [a for a in os.listdir(model_path) if a.endswith("_weights.pth")][0]
+    model_weights_path = os.path.join(model_path, model_weights_path)
+    
+    model = torch.jit.load(model_trace_path)
+    model_weights = torch.load(model_weights_path)
+    
+    model.load_state_dict(model_weights)
+    model.eval()
+    model.to('cuda')
+    return model
