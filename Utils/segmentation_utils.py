@@ -171,7 +171,7 @@ def load_checkpoint(checkpoint, model):
 
 def view_model(model_path):
     # Model trace path
-    model_trace_path = [a for a in os.listdir(model_path) if a.endswith("_trace.pth")][0]
+    model_trace_path = [a for a in os.listdir(model_path) if a.endswith("_traceModel.pth")][0]
     model_trace_path = os.path.join(model_path, model_trace_path)
     
     # model weights path
